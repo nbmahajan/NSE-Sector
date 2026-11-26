@@ -1,6 +1,11 @@
 const NSE_INDEX_API = "https://www.nseindia.in/api/NextApi/apiClient/marketWatchApi?functionName=";
+const NSE_HOLIDAY_API = "https://www.nseindia.com/api/holiday-master?type=trading&year=";
 const REQUEST_TIMEOUT_MS = 20000;
 const IST_OFFSET_MS = 330 * 60 * 1000;
+const NSE_HOLIDAY_REFERER = "https://www.nseindia.com/resources/exchange-communication-holidays";
+let holidayCache = null;
+let holidayCacheAt = 0;
+let holidayRequest = null;
 
 function normalizeName(value) {
   return String(value || "")
@@ -56,14 +61,14 @@ function normalizeNseTime(value) {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : text;
 }
 
-async function getNseJson(url) {
+async function getNseJson(url, referer) {
   let response;
   try {
     response = await fetch(url, {
       headers: {
         Accept: "application/json,text/plain,*/*",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/132.0.0.0 Safari/537.36",
-        Referer: "https://www.nseindia.in/market-data/live-market-indices"
+        Referer: referer || "https://www.nseindia.in/market-data/live-market-indices"
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
@@ -76,6 +81,39 @@ async function getNseJson(url) {
   } catch {
     throw new Error("NSE market indices source returned an unreadable response.");
   }
+}
+
+function holidayDateKey(value) {
+  const text = String(value || "").trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return isoMatch[1] + "-" + isoMatch[2] + "-" + isoMatch[3];
+  const match = text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (!match) return null;
+  const months = { jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06", jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12" };
+  const month = months[match[2].toLowerCase()];
+  return month ? match[3] + "-" + month + "-" + String(Number(match[1])).padStart(2, "0") : null;
+}
+
+export async function loadNseTradingHolidays(year) {
+  const yearNumber = Number(year);
+  const now = Date.now();
+  if (holidayCache && holidayCache.year === yearNumber && now - holidayCacheAt < 12 * 60 * 60 * 1000) return holidayCache;
+  if (holidayRequest) return holidayRequest;
+
+  holidayRequest = (async function () {
+    const payload = await getNseJson(NSE_HOLIDAY_API + encodeURIComponent(String(yearNumber)), NSE_HOLIDAY_REFERER);
+    function segmentDates(name) {
+      if (!Array.isArray(payload && payload[name])) throw new Error("NSE returned an unreadable " + name + " holiday list.");
+      return new Set(payload[name].map(function (item) { return holidayDateKey(item && item.tradingDate); }).filter(Boolean));
+    }
+    const calendar = { year: yearNumber, CM: segmentDates("CM"), FO: segmentDates("FO") };
+    if (!calendar.CM.size || !calendar.FO.size) throw new Error("NSE returned an empty trading holiday list.");
+    holidayCache = calendar;
+    holidayCacheAt = Date.now();
+    return holidayCache;
+  })().finally(function () { holidayRequest = null; });
+
+  return holidayRequest;
 }
 
 async function mapLimit(items, limit, mapper) {

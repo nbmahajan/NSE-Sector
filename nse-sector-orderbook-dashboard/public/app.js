@@ -9,6 +9,7 @@ let constituentRefreshTime = null;
 let constituentStatus = "Loading official NSE Indices constituent lists…";
 let selectedIndexName = null;
 let constituentRefreshPromise = null;
+let nextConstituentCheckAt = 0;
 const tableSorts = {
   green: { key: "symbol", ascending: true },
   red: { key: "symbol", ascending: true },
@@ -194,6 +195,9 @@ async function loadBundledConstituents() {
 }
 
 async function refreshConstituents() {
+  const nseMarketOpen = Boolean(currentSnapshot && currentSnapshot.nextFetchAt && currentSnapshot.nextFetchAt.nseOpen);
+  if (!nseMarketOpen || Date.now() < nextConstituentCheckAt) return;
+  nextConstituentCheckAt = Date.now() + 60 * 60 * 1000;
   if (constituentRefreshPromise) return constituentRefreshPromise;
   constituentRefreshPromise = (async function () {
     let cacheIsFresh = false;
@@ -516,7 +520,12 @@ function updateNotice(snapshot) {
     message.textContent = "Demo mode was selected in the local settings. Displayed values are samples.";
   } else if (nse && nse.ok && angel && angel.ok) {
     notice.dataset.state = "live";
-    message.textContent = "NSE index tiles refresh every five minutes. Angel One order books continue to refresh every minute.";
+    const nextFetchAt = snapshot.nextFetchAt || {};
+    if (nextFetchAt.nseOpen === false && nextFetchAt.angelOneOpen === false) {
+      message.textContent = "Markets are closed; the latest values remain shown. NSE refreshes during 09:15–15:30 IST and Angel One during 09:15–15:45 IST on trading days.";
+    } else {
+      message.textContent = "During market hours, NSE index tiles refresh every five minutes (09:15–15:30 IST); Angel One order books refresh every minute (09:15–15:45 IST).";
+    }
   } else {
     notice.dataset.state = "error";
     const problems = [];
@@ -529,6 +538,7 @@ function updateNotice(snapshot) {
 function render(snapshot) {
   if (!snapshot || snapshot.loading) return;
   currentSnapshot = snapshot;
+  if (snapshot.nextFetchAt && snapshot.nextFetchAt.nseOpen) refreshConstituents();
   const mode = byId("mode-pill");
   const nseOkay = snapshot.sources && snapshot.sources.nse && snapshot.sources.nse.ok;
   const angelOkay = snapshot.sources && snapshot.sources.angelOne && snapshot.sources.angelOne.ok;
@@ -628,7 +638,9 @@ function updateCountdown(nextFetchAt) {
   }
   const nse = remaining(nextFetchAt && nextFetchAt.nse);
   const angel = remaining(nextFetchAt && nextFetchAt.angelOne);
-  byId("refresh-countdown").textContent = "Angel One " + clock(angel) + " · NSE " + clock(nse);
+  const angelText = nextFetchAt && nextFetchAt.angelOneOpen === false ? "closed" : clock(angel);
+  const nseText = nextFetchAt && nextFetchAt.nseOpen === false ? "closed" : clock(nse);
+  byId("refresh-countdown").textContent = "Angel One " + angelText + " · NSE " + nseText;
 }
 
 function csvCell(value) {
@@ -853,7 +865,6 @@ byId("sign-out-button").addEventListener("click", async function () {
 
 renderBeforeConnection();
 loadBundledConstituents().finally(function () {
-  refreshConstituents();
   loadSnapshot(false);
 });
 checkSession(true);
