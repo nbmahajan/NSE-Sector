@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: nse-sector-orderbook-dashboard
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: nse-sector-orderbook-dashboard
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_MODE
+        value: live
+      - key: DASHBOARD_PASSWORD
+        sync: false
