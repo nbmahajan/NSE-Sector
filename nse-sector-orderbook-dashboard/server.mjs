@@ -11,7 +11,7 @@ import { createAngelSession } from "./src/angel-session.mjs";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const publicRoot = path.join(projectRoot, "public");
 const runningOnRender = String(process.env.RENDER || "").toLowerCase() === "true";
-const MIN_DASHBOARD_PASSWORD_LENGTH = 24;
+const MIN_DASHBOARD_PASSWORD_LENGTH = 12;
 
 function loadLocalEnv() {
   const envPath = path.join(projectRoot, ".env");
@@ -61,7 +61,7 @@ function authorizeHostedDashboard(request, response) {
   if (!runningOnRender) return true;
   const expectedPassword = String(process.env.DASHBOARD_PASSWORD || "");
   if (expectedPassword.length < MIN_DASHBOARD_PASSWORD_LENGTH) {
-    sendJson(response, 503, { error: "The dashboard owner must set a 24-character-or-longer DASHBOARD_PASSWORD in Render before using this service." });
+    sendJson(response, 503, { error: "The dashboard owner must set a 12-character-or-longer DASHBOARD_PASSWORD in Render before using this service." });
     return false;
   }
 
