@@ -1,5 +1,6 @@
 const NSE_INDEX_API = "https://www.nseindia.in/api/NextApi/apiClient/marketWatchApi?functionName=";
 const REQUEST_TIMEOUT_MS = 20000;
+const IST_OFFSET_MS = 330 * 60 * 1000;
 
 function normalizeName(value) {
   return String(value || "")
@@ -28,9 +29,29 @@ function normalizeNseTime(value) {
       let hour = Number(match[4] || 0);
       if (match[7]) hour = (hour % 12) + (match[7].toLowerCase() === "pm" ? 12 : 0);
       const istAsUtc = Date.UTC(Number(match[3]), month, Number(match[1]), hour, Number(match[5] || 0), Number(match[6] || 0));
-      return new Date(istAsUtc - 330 * 60 * 1000).toISOString();
+      return new Date(istAsUtc - IST_OFFSET_MS).toISOString();
     }
   }
+
+  // NSE may provide an ISO-like timestamp without a timezone suffix. Treat that
+  // wall-clock value as IST instead of letting Render's UTC timezone reinterpret it.
+  const localIsoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/);
+  if (localIsoMatch) {
+    const year = Number(localIsoMatch[1]);
+    const month = Number(localIsoMatch[2]) - 1;
+    const day = Number(localIsoMatch[3]);
+    const hour = Number(localIsoMatch[4]);
+    const minute = Number(localIsoMatch[5]);
+    const second = Number(localIsoMatch[6] || 0);
+    const millisecond = Number(((localIsoMatch[7] || "") + "000").slice(0, 3));
+    const istAsUtc = Date.UTC(year, month, day, hour, minute, second, millisecond);
+    const check = new Date(istAsUtc);
+    if (check.getUTCFullYear() === year && check.getUTCMonth() === month && check.getUTCDate() === day
+        && hour <= 23 && minute <= 59 && second <= 59) {
+      return new Date(istAsUtc - IST_OFFSET_MS).toISOString();
+    }
+  }
+
   const parsed = new Date(text);
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : text;
 }
