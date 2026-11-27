@@ -226,6 +226,18 @@
     </footer>
   </main>
 
+  <nav class="mobile-group-nav" id="mobile-group-nav" aria-label="Jump to an order-book group">
+    <button class="mobile-group-button positive" type="button" data-group-target="green" aria-label="Jump to Green group">
+      <span class="mobile-group-dot" aria-hidden="true"></span><span>Green</span><span class="mobile-group-nav-count" id="mobile-green-count">0</span>
+    </button>
+    <button class="mobile-group-button negative" type="button" data-group-target="red" aria-label="Jump to Red group">
+      <span class="mobile-group-dot" aria-hidden="true"></span><span>Red</span><span class="mobile-group-nav-count" id="mobile-red-count">0</span>
+    </button>
+    <button class="mobile-group-button mixed" type="button" data-group-target="white" aria-label="Jump to White group">
+      <span class="mobile-group-dot" aria-hidden="true"></span><span>White</span><span class="mobile-group-nav-count" id="mobile-white-count">0</span>
+    </button>
+  </nav>
+
   <div class="login-backdrop" id="login-backdrop">
     <section class="login-panel" role="dialog" aria-modal="true" aria-labelledby="login-title">
       <div class="login-brand">Angel One · read-only</div>

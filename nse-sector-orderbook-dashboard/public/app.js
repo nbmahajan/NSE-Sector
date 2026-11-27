@@ -10,6 +10,7 @@ let constituentStatus = "Loading official NSE Indices constituent lists…";
 let selectedIndexName = null;
 let constituentRefreshPromise = null;
 let nextConstituentCheckAt = 0;
+let mobileGroupScrollFrame = null;
 const tableSorts = {
   green: { key: "symbol", ascending: true },
   red: { key: "symbol", ascending: true },
@@ -456,6 +457,8 @@ function updateSortHeaders() {
 
 function renderGroup(name, allItems, visibleItems, sectorName) {
   byId(name + "-count").textContent = String(visibleItems.length);
+  const mobileCount = byId("mobile-" + name + "-count");
+  if (mobileCount) mobileCount.textContent = String(visibleItems.length);
   const target = byId(name + "-rows");
   if (!visibleItems.length) {
     const message = allItems.length
@@ -467,6 +470,39 @@ function renderGroup(name, allItems, visibleItems, sectorName) {
     return;
   }
   target.innerHTML = visibleItems.map(rowMarkup).join("");
+}
+
+function setActiveMobileGroup(name) {
+  document.querySelectorAll(".mobile-group-button").forEach(function (button) {
+    if (button.dataset.groupTarget === name) button.setAttribute("aria-current", "location");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+function updateActiveMobileGroup() {
+  if (!window.matchMedia("(max-width: 620px)").matches) {
+    setActiveMobileGroup(null);
+    return;
+  }
+  const marker = Math.max(100, window.innerHeight * 0.3);
+  const buckets = Array.from(document.querySelectorAll(".bucket[data-bucket]"));
+  let active = null;
+  for (const bucket of buckets) {
+    const rect = bucket.getBoundingClientRect();
+    if (rect.top <= marker) active = bucket.dataset.bucket;
+    if (rect.top > marker) break;
+  }
+  setActiveMobileGroup(active);
+}
+
+function jumpToMobileGroup(name) {
+  const bucket = document.querySelector('.bucket[data-bucket="' + name + '"]');
+  if (!bucket) return;
+  setActiveMobileGroup(name);
+  bucket.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    block: "start"
+  });
 }
 
 function renderUnavailable(rows, unlistedSymbols) {
@@ -617,6 +653,7 @@ function render(snapshot) {
   updateNotice(snapshot);
   updateCountdown(snapshot.nextFetchAt);
   updateSortHeaders();
+  updateActiveMobileGroup();
 }
 
 function renderBeforeConnection() {
@@ -744,6 +781,19 @@ document.querySelectorAll(".bucket-sort").forEach(function (select) {
     else updateSortHeaders();
   });
 });
+document.querySelectorAll(".mobile-group-button").forEach(function (button) {
+  button.addEventListener("click", function () {
+    jumpToMobileGroup(button.dataset.groupTarget);
+  });
+});
+window.addEventListener("scroll", function () {
+  if (mobileGroupScrollFrame !== null) return;
+  mobileGroupScrollFrame = window.requestAnimationFrame(function () {
+    mobileGroupScrollFrame = null;
+    updateActiveMobileGroup();
+  });
+}, { passive: true });
+window.addEventListener("resize", updateActiveMobileGroup);
 byId("index-search").addEventListener("input", function () { if (currentSnapshot) renderIndices(currentSnapshot.indices); });
 byId("index-sort").addEventListener("change", function () { if (currentSnapshot) renderIndices(currentSnapshot.indices); });
 byId("clear-all-button").addEventListener("click", function () {
@@ -864,6 +914,7 @@ byId("sign-out-button").addEventListener("click", async function () {
 });
 
 renderBeforeConnection();
+updateActiveMobileGroup();
 loadBundledConstituents().finally(function () {
   loadSnapshot(false);
 });
