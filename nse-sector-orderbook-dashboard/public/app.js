@@ -17,6 +17,9 @@ const tableSorts = {
   white: { key: "symbol", ascending: true }
 };
 let previouslyAuthenticated = false;
+let sessionCheckInFlight = false;
+let sessionChangeInFlight = false;
+let sessionRevision = 0;
 
 function byId(id) {
   return document.getElementById(id);
@@ -870,16 +873,25 @@ function setSessionUi(authenticated) {
 }
 
 async function checkSession(showLogin) {
+  if (sessionCheckInFlight || sessionChangeInFlight) return;
+  sessionCheckInFlight = true;
+  const requestRevision = sessionRevision;
   try {
     const response = await fetch("/api/session", { cache: "no-store" });
+    if (!response.ok) return;
     const status = await response.json();
+    // A phone can have a slow session request still in flight when sign-in finishes.
+    // Never let that older response undo the newer sign-in state.
+    if (requestRevision !== sessionRevision || sessionChangeInFlight) return;
     const wasAuthenticated = previouslyAuthenticated;
     setSessionUi(Boolean(status.authenticated));
     if (!status.authenticated && (showLogin || wasAuthenticated)) {
       byId("login-backdrop").hidden = false;
       loadLoginDefaults();
     }
-  } catch {}
+  } catch {} finally {
+    sessionCheckInFlight = false;
+  }
 }
 
 byId("login-form").addEventListener("submit", async function (event) {
@@ -888,6 +900,8 @@ byId("login-form").addEventListener("submit", async function (event) {
   const button = byId("login-submit");
   const error = byId("login-error");
   const values = Object.fromEntries(new FormData(form).entries());
+  sessionRevision += 1;
+  sessionChangeInFlight = true;
   button.disabled = true;
   button.textContent = "Signing in…";
   error.hidden = true;
@@ -909,8 +923,10 @@ byId("login-form").addEventListener("submit", async function (event) {
     error.textContent = failure.message || "Sign-in failed. Check your details and try again.";
     error.hidden = false;
   } finally {
+    sessionChangeInFlight = false;
     button.disabled = false;
     button.textContent = "Sign in";
+    checkSession(false);
   }
 });
 
@@ -922,6 +938,8 @@ byId("sign-in-button").addEventListener("click", function () {
 byId("continue-without-login").addEventListener("click", function () { byId("login-backdrop").hidden = true; });
 byId("sign-out-button").addEventListener("click", async function () {
   const button = byId("sign-out-button");
+  sessionRevision += 1;
+  sessionChangeInFlight = true;
   button.disabled = true;
   try {
     await fetch("/api/logout", { method: "POST", cache: "no-store" });
@@ -931,7 +949,9 @@ byId("sign-out-button").addEventListener("click", async function () {
     loadLoginDefaults();
     loadSnapshot(false);
   } finally {
+    sessionChangeInFlight = false;
     button.disabled = false;
+    checkSession(false);
   }
 });
 
