@@ -182,7 +182,7 @@ export function createDataService(projectRoot, angelSession) {
       const result = await loadAngelOneQuotes(watchlist, angelSession);
       if (generation !== angelGeneration) return;
       const message = result.failedBatchCount
-        ? "Angel One partial · " + result.failedBatchCount + " batch(es) failed"
+        ? "Angel One partial · " + result.failedBatchCount + " batch(es) failed" + (result.failedBatchMessage ? " · " + result.failedBatchMessage : "")
         : "Angel One SmartAPI";
       angelCache = {
         quotes: result.quotes,

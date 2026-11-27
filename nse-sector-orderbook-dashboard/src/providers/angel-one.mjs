@@ -177,6 +177,7 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
 
   const quoteByToken = new Map();
   const failedBatchSymbols = [];
+  let firstBatchError = null;
   let successfulBatches = 0;
   const batches = [];
   for (let index = 0; index < resolved.instruments.length; index += SYMBOLS_PER_REQUEST) {
@@ -189,20 +190,27 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
     try {
       const payload = await fetchQuoteBatch(batch, angelSession);
       if (payload.status === false || payload.success === false) {
-        throw new Error("Angel One did not return a successful market-data response.");
+        const reason = String(payload.message || payload.errorMessage || "").trim();
+        throw new Error(reason
+          ? "Angel One rejected the quote request: " + reason
+          : "Angel One did not return a successful market-data response.");
       }
       for (const quote of quoteList(payload)) {
         const token = String(quote.symbolToken || quote.symboltoken || "");
         if (token) quoteByToken.set(token, quote);
       }
       successfulBatches += 1;
-    } catch {
+    } catch (error) {
+      if (!firstBatchError) firstBatchError = error && error.message ? error.message : "Angel One quote request failed.";
       failedBatchSymbols.push(...batch.map(function (item) { return item.symbol; }));
     }
   }
 
-  if (!successfulBatches || !quoteByToken.size) {
-    throw new Error("Angel One returned no quote data. Check the API session and local settings.");
+  if (!successfulBatches) {
+    throw new Error(firstBatchError || "Angel One rejected all quote batches.");
+  }
+  if (!quoteByToken.size) {
+    throw new Error("Angel One accepted the quote requests but returned no instrument quotes.");
   }
 
   const quotes = [];
@@ -243,6 +251,7 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
     symbols: requestedSymbols,
     missingInstruments: resolved.missing,
     failedBatchCount: batches.length - successfulBatches,
+    failedBatchMessage: firstBatchError,
     sourceTime: quoteTimes[0] || new Date().toISOString()
   };
 }
