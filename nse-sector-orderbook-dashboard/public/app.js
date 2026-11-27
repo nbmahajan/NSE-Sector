@@ -453,6 +453,25 @@ function updateSortHeaders() {
   document.querySelectorAll(".bucket-sort").forEach(function (select) {
     select.value = tableSorts[select.dataset.bucketSort].key;
   });
+  document.querySelectorAll(".mobile-sort-button").forEach(function (button) {
+    const bucket = button.closest(".bucket").dataset.bucket;
+    const sort = tableSorts[bucket];
+    const selected = button.dataset.mobileSort === sort.key;
+    const name = button.textContent.trim();
+    button.setAttribute("aria-pressed", String(selected));
+    button.dataset.arrow = selected ? (sort.ascending ? "↑" : "↓") : "";
+    button.setAttribute("aria-label", "Sort by " + name.toLowerCase() + (selected
+      ? (sort.ascending ? ", currently ascending" : ", currently descending")
+      : ""));
+  });
+}
+
+function setTableSort(bucket, key) {
+  const sort = tableSorts[bucket];
+  if (sort.key === key) sort.ascending = !sort.ascending;
+  else tableSorts[bucket] = { key: key, ascending: key === "symbol" };
+  if (currentSnapshot) render(currentSnapshot);
+  else updateSortHeaders();
 }
 
 function renderGroup(name, allItems, visibleItems, sectorName) {
@@ -765,12 +784,13 @@ for (const id of ["change-filter", "cash-filter", "future-filter"]) {
 document.querySelectorAll(".sort-header").forEach(function (button) {
   button.addEventListener("click", function () {
     const bucket = button.closest(".bucket").dataset.bucket;
-    const sort = tableSorts[bucket];
-    const key = button.dataset.sort;
-    if (sort.key === key) sort.ascending = !sort.ascending;
-    else tableSorts[bucket] = { key: key, ascending: key === "symbol" };
-    if (currentSnapshot) render(currentSnapshot);
-    else updateSortHeaders();
+    setTableSort(bucket, button.dataset.sort);
+  });
+});
+document.querySelectorAll(".mobile-sort-button").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const bucket = button.closest(".bucket").dataset.bucket;
+    setTableSort(bucket, button.dataset.mobileSort);
   });
 });
 document.querySelectorAll(".bucket-sort").forEach(function (select) {

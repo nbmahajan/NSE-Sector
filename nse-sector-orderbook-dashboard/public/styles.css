@@ -115,6 +115,11 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 680; letter-spac
 .bucket-rule { overflow: hidden; color: var(--muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
 .bucket-count { min-width: 22px; padding: 2px 6px; border-radius: 999px; background: var(--soft); color: var(--muted); text-align: center; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .bucket-sort { display: none; min-height: 29px; padding: 4px 20px 4px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 9px; }
+.mobile-sort-controls { display: none; }
+.mobile-sort-button { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; }
+.mobile-sort-button::after { content: attr(data-arrow); padding-left: 5px; color: var(--blue); font-weight: 800; }
+.mobile-sort-button[aria-pressed="true"] { border-color: var(--blue); background: var(--soft); font-weight: 750; }
+.mobile-sort-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .table-head, .quote-row { display: grid; grid-template-columns: .78fr .92fr 1fr 1fr; gap: 6px; align-items: start; }
 .table-head { min-height: 35px; padding: 8px 9px 6px; color: var(--muted); font-size: 8px; font-weight: 700; line-height: 1.2; letter-spacing: .025em; text-transform: uppercase; }
 .sort-header { min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font-size: inherit; font-weight: inherit; line-height: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
@@ -234,7 +239,10 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 680; letter-spac
   .bucket-title { flex: 1 1 auto; }
   .bucket-rule { display: none; }
   .bucket-count { margin-left: auto; }
-  .bucket-sort { display: block; flex: 1 1 100%; }
+  .bucket-sort { display: none; }
+  .mobile-sort-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px 9px; }
+  .mobile-sort-caption { grid-column: 1 / -1; color: var(--muted); font-size: 9px; font-weight: 700; }
+  .mobile-sort-button { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 8px 10px; font-size: 10px; text-align: left; }
   .bucket { scroll-margin-top: 12px; scroll-margin-bottom: calc(62px + env(safe-area-inset-bottom)); }
   .mobile-group-nav {
     position: fixed; z-index: 15; right: 0; bottom: 0; left: 0;
