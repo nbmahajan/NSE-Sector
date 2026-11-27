@@ -263,9 +263,9 @@
     <section class="login-panel" role="dialog" aria-modal="true" aria-labelledby="login-title">
       <div class="login-brand">Angel One · read-only</div>
       <h2 id="login-title">Sign in to load the order books</h2>
-      <p class="login-intro">Enter SmartAPI details here in this local dashboard. Its API key and session tokens stay in server memory while it runs. The PIN and one-time code are used only for sign-in and are cleared from the form after a successful sign-in.</p>
+      <p class="login-intro">Enter your SmartAPI API Key here, not your API Secret. The session stays on this dashboard server and is shared by its browsers. Your PIN and one-time code are used only to sign in, then cleared from the form.</p>
       <form id="login-form" autocomplete="off">
-        <label class="login-field"><span>SmartAPI key</span><input name="apiKey" type="password" required autocomplete="off"></label>
+        <label class="login-field"><span>SmartAPI API Key (not API Secret)</span><input name="apiKey" type="password" required autocomplete="off"></label>
         <div class="login-columns">
           <label class="login-field"><span>Client code</span><input name="clientCode" type="text" required autocomplete="off"></label>
           <label class="login-field"><span>PIN</span><input name="pin" type="password" required inputmode="numeric" autocomplete="off"></label>

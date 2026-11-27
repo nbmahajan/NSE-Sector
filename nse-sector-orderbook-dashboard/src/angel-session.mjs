@@ -174,6 +174,10 @@ export function createAngelSession() {
       return { authenticated: Boolean(session) };
     },
 
+    clear() {
+      session = null;
+    },
+
     async request(url, options) {
       await ensureFreshToken();
       const makeRequest = function () {

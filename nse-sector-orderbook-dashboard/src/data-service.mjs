@@ -195,6 +195,17 @@ export function createDataService(projectRoot, angelSession) {
       };
     } catch (error) {
       if (generation !== angelGeneration) return;
+      const invalidApiKey = Boolean(error && (error.code === "ANGEL_INVALID_API_KEY" || /invalid\s*api\s*key/i.test(String(error.message || ""))));
+      if (invalidApiKey) {
+        angelGeneration += 1;
+        if (angelSession && typeof angelSession.clear === "function") angelSession.clear();
+        angelCache = {
+          quotes: [], symbols: [], missingInstruments: [], failedBatchCount: 0,
+          sourceTime: null,
+          status: sourceResult(false, "offline", error.message || "Angel One rejected the market-data API key. Sign in again.", null)
+        };
+        return;
+      }
       angelCache.status = sourceResult(false, angelCache.quotes.length ? "stale" : "offline", error.message || "Angel One source unavailable", angelCache.sourceTime);
     } finally {
       lastCompletedRefreshAt = Date.now();

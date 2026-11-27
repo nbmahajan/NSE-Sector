@@ -48,7 +48,13 @@ async function fetchJson(url, options, angelSession) {
     throw new Error("Angel One returned a response that was not JSON.");
   }
   if (!response.ok) {
-    throw new Error("Angel One quote request failed with HTTP " + response.status + ".");
+    const reason = String(json && (json.message || json.errorMessage) || response.headers.get("x-error-message") || "").trim();
+    const errorCode = String(json && json.errorcode || "").trim();
+    const error = new Error("Angel One quote request failed with HTTP " + response.status
+      + (reason ? ": " + reason : "")
+      + (errorCode ? " (" + errorCode + ")" : "") + ".");
+    if (/invalid\s*api\s*key/i.test(reason) || errorCode.toUpperCase() === "AG8004") error.code = "ANGEL_INVALID_API_KEY";
+    throw error;
   }
   return json;
 }
@@ -189,10 +195,16 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
     const batch = batches[index];
     try {
       const payload = await fetchQuoteBatch(batch, angelSession);
-      if (payload.status === false || payload.success === false) {
+      if (payload.status === false || payload.status === "false" || payload.success === false || payload.success === "false") {
         const reason = String(payload.message || payload.errorMessage || "").trim();
+        const errorCode = String(payload.errorcode || "").trim();
+        if (/invalid\s*api\s*key/i.test(reason) || errorCode.toUpperCase() === "AG8004") {
+          const invalidKeyError = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Sign in again and confirm you entered the SmartAPI API Key, not the API Secret.");
+          invalidKeyError.code = "ANGEL_INVALID_API_KEY";
+          throw invalidKeyError;
+        }
         throw new Error(reason
-          ? "Angel One rejected the quote request: " + reason
+          ? "Angel One rejected the quote request: " + reason + (errorCode ? " (" + errorCode + ")" : "")
           : "Angel One did not return a successful market-data response.");
       }
       for (const quote of quoteList(payload)) {
@@ -201,6 +213,7 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
       }
       successfulBatches += 1;
     } catch (error) {
+      if (error && error.code === "ANGEL_INVALID_API_KEY") throw error;
       if (!firstBatchError) firstBatchError = error && error.message ? error.message : "Angel One quote request failed.";
       failedBatchSymbols.push(...batch.map(function (item) { return item.symbol; }));
     }
