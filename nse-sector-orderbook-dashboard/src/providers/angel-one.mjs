@@ -184,6 +184,7 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
   const quoteByToken = new Map();
   const failedBatchSymbols = [];
   let firstBatchError = null;
+  let consecutiveInvalidApiKeyFailures = 0;
   let successfulBatches = 0;
   const batches = [];
   for (let index = 0; index < resolved.instruments.length; index += SYMBOLS_PER_REQUEST) {
@@ -212,9 +213,15 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
         if (token) quoteByToken.set(token, quote);
       }
       successfulBatches += 1;
+      consecutiveInvalidApiKeyFailures = 0;
     } catch (error) {
-      if (error && error.code === "ANGEL_INVALID_API_KEY") throw error;
       if (!firstBatchError) firstBatchError = error && error.message ? error.message : "Angel One quote request failed.";
+      if (error && error.code === "ANGEL_INVALID_API_KEY") {
+        consecutiveInvalidApiKeyFailures += 1;
+        if (!angelSession.status().authenticated || (!successfulBatches && consecutiveInvalidApiKeyFailures >= 2)) throw error;
+      } else {
+        consecutiveInvalidApiKeyFailures = 0;
+      }
       failedBatchSymbols.push(...batch.map(function (item) { return item.symbol; }));
     }
   }

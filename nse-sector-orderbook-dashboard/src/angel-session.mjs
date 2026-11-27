@@ -52,9 +52,17 @@ async function readJson(response, serviceName) {
   } catch {
     throw new Error(serviceName + " returned an unreadable response.");
   }
-  if (!response.ok || payload.status === false || payload.success === false) {
+  if (!response.ok || payload.status === false || payload.status === "false" || payload.success === false || payload.success === "false") {
     const apiMessage = String(payload.message || payload.errorMessage || "").trim();
-    throw new Error(apiMessage ? serviceName + ": " + apiMessage : serviceName + " request failed.");
+    const errorCode = String(payload.errorcode || "").trim();
+    const error = new Error((apiMessage ? serviceName + ": " + apiMessage : serviceName + " request failed.")
+      + (errorCode ? " (" + errorCode + ")" : ""));
+    if (/invalid\s*api\s*key/i.test(apiMessage) || errorCode.toUpperCase() === "AG8004") {
+      error.code = "ANGEL_INVALID_API_KEY";
+    } else if (/invalid.{0,20}(?:refresh|auth|jwt)?\s*token|(?:refresh|auth|jwt)?\s*token.{0,20}(?:invalid|expired)|session.{0,20}expired/i.test(apiMessage)) {
+      error.code = "ANGEL_SESSION_EXPIRED";
+    }
+    throw error;
   }
   return payload;
 }
@@ -91,8 +99,18 @@ export function createAngelSession() {
   }
 
   async function performTokenRefresh() {
-    if (!session || !session.refreshToken) throw new Error("Your Angel One session has expired. Sign in again.");
+    if (!session) {
+      const error = new Error("Your Angel One session has expired. Sign in again.");
+      error.code = "ANGEL_SESSION_EXPIRED";
+      throw error;
+    }
     const activeSession = session;
+    if (!activeSession.refreshToken) {
+      session = null;
+      const error = new Error("Your Angel One session has expired. Sign in again.");
+      error.code = "ANGEL_SESSION_EXPIRED";
+      throw error;
+    }
     try {
       const response = await fetch(REFRESH_URL, {
         method: "POST",
@@ -101,7 +119,11 @@ export function createAngelSession() {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       });
       const payload = await readJson(response, "Angel One session refresh failed");
-      if (session !== activeSession) throw new Error("The Angel One session ended. Sign in again if you want order-book data.");
+      if (session !== activeSession) {
+        const error = new Error("The Angel One session ended. Sign in again if you want order-book data.");
+        error.code = "ANGEL_SESSION_EXPIRED";
+        throw error;
+      }
       if (!payload.data || !payload.data.jwtToken) throw new Error("Angel One did not return a refreshed session.");
       session = {
         ...activeSession,
@@ -110,7 +132,7 @@ export function createAngelSession() {
         feedToken: payload.data.feedToken || activeSession.feedToken
       };
     } catch (error) {
-      if (session === activeSession) session = null;
+      if (session === activeSession && (error.code === "ANGEL_INVALID_API_KEY" || error.code === "ANGEL_SESSION_EXPIRED")) session = null;
       throw error;
     }
   }
@@ -191,7 +213,9 @@ export function createAngelSession() {
       if (response.status === 401 || response.status === 403) {
         if (!refreshPromise) refreshPromise = performTokenRefresh().finally(function () { refreshPromise = null; });
         await refreshPromise;
+        const refreshedSession = session;
         response = await makeRequest();
+        if ((response.status === 401 || response.status === 403) && session === refreshedSession) session = null;
       }
       return response;
     },

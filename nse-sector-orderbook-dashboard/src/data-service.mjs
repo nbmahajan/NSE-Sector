@@ -195,7 +195,7 @@ export function createDataService(projectRoot, angelSession) {
       };
     } catch (error) {
       if (generation !== angelGeneration) return;
-      const invalidApiKey = Boolean(error && (error.code === "ANGEL_INVALID_API_KEY" || /invalid\s*api\s*key/i.test(String(error.message || ""))));
+      const invalidApiKey = Boolean(error && error.code === "ANGEL_INVALID_API_KEY");
       if (invalidApiKey) {
         angelGeneration += 1;
         if (angelSession && typeof angelSession.clear === "function") angelSession.clear();
