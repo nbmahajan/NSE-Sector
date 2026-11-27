@@ -2,7 +2,7 @@ import { gunzipSync } from "node:zlib";
 
 const MASTER_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json";
 const QUOTE_URL = "https://apiconnect.angelone.in/rest/secure/angelbroking/market/v1/quote/";
-const REQUEST_TIMEOUT_MS = 12000;
+const REQUEST_TIMEOUT_MS = 30000;
 const SYMBOLS_PER_REQUEST = 25;
 const MIN_REQUEST_GAP_MS = 1100;
 let masterCache = null;

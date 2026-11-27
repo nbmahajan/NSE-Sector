@@ -3,7 +3,7 @@ import os from "node:os";
 const LOGIN_URL = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword";
 const REFRESH_URL = "https://apiconnect.angelone.in/rest/auth/angelbroking/jwt/v1/generateTokens";
 const LOGOUT_URL = "https://apiconnect.angelone.in/rest/secure/angelbroking/user/v1/logout";
-const REQUEST_TIMEOUT_MS = 12000;
+const REQUEST_TIMEOUT_MS = 30000;
 
 function networkDefaults() {
   const entries = Object.entries(os.networkInterfaces()).flatMap(function ([name, addresses]) {

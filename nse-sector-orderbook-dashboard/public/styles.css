@@ -168,7 +168,7 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 680; letter-spac
 .network-settings summary { color: var(--muted); font-size: 10px; cursor: pointer; }
 .network-settings .login-field input { font-variant-numeric: tabular-nums; }
 .login-submit { width: 100%; margin-top: 14px; border-color: transparent; background: var(--blue); color: #fff; }
-.login-submit:hover { filter: brightness(1.08); }
+.login-submit:hover { background: var(--blue); filter: brightness(1.08); }
 .login-error { margin: 10px 0 0; color: var(--red); font-size: 10px; }
 .continue-button { display: block; margin: 11px auto 0; padding: 5px; border: 0; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
 .continue-button:hover { color: var(--ink); text-decoration: underline; }

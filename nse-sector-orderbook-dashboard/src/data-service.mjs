@@ -80,6 +80,7 @@ export function createDataService(projectRoot, angelSession) {
   let currentSnapshot = null;
   let refreshPromise = null;
   let forceRefreshQueued = false;
+  let forceRefreshQueuedOutsideMarketHours = false;
   let lastNseAttemptAt = 0;
   let lastAngelAttemptAt = 0;
   let lastCompletedRefreshAt = null;
@@ -200,7 +201,7 @@ export function createDataService(projectRoot, angelSession) {
     }
   }
 
-  async function performRefresh(force) {
+  async function performRefresh(force, allowOutsideMarketHours) {
     const config = await getConfiguration();
     const mode = String(process.env.DATA_MODE || "live").toLowerCase() === "demo" ? "demo" : "live";
     let now = Date.now();
@@ -257,8 +258,8 @@ export function createDataService(projectRoot, angelSession) {
         }
       }
 
-      const nseDue = nseMarketWindow.isOpen && (force || !lastNseAttemptAt || now - lastNseAttemptAt >= NSE_REFRESH_MS);
-      const angelDue = angelMarketWindow.isOpen && (force || !lastAngelAttemptAt || now - lastAngelAttemptAt >= ANGEL_REFRESH_MS);
+      const nseDue = (nseMarketWindow.isOpen || allowOutsideMarketHours) && (force || !lastNseAttemptAt || now - lastNseAttemptAt >= NSE_REFRESH_MS);
+      const angelDue = (angelMarketWindow.isOpen || allowOutsideMarketHours) && (force || !lastAngelAttemptAt || now - lastAngelAttemptAt >= ANGEL_REFRESH_MS);
       const pending = [];
       if (nseDue) pending.push(refreshNse(config.sectoralIndexNames));
       if (angelDue) pending.push(refreshAngel(config.watchlist));
@@ -313,9 +314,9 @@ export function createDataService(projectRoot, angelSession) {
     return currentSnapshot;
   }
 
-  function startRefresh(force) {
+  function startRefresh(force, allowOutsideMarketHours) {
     let tracked;
-    tracked = performRefresh(Boolean(force)).finally(function () {
+    tracked = performRefresh(Boolean(force), Boolean(allowOutsideMarketHours)).finally(function () {
       if (refreshPromise === tracked) refreshPromise = null;
     });
     refreshPromise = tracked;
@@ -323,18 +324,23 @@ export function createDataService(projectRoot, angelSession) {
   }
 
   return {
-    async refresh(force) {
+    async refresh(force, allowOutsideMarketHours) {
       if (refreshPromise) {
-        if (force) forceRefreshQueued = true;
+        if (force) {
+          forceRefreshQueued = true;
+          forceRefreshQueuedOutsideMarketHours = forceRefreshQueuedOutsideMarketHours || Boolean(allowOutsideMarketHours);
+        }
         const active = refreshPromise;
         const result = await active;
         if (forceRefreshQueued && !refreshPromise) {
+          const queuedOutsideMarketHours = forceRefreshQueuedOutsideMarketHours;
           forceRefreshQueued = false;
-          return startRefresh(true);
+          forceRefreshQueuedOutsideMarketHours = false;
+          return startRefresh(true, queuedOutsideMarketHours);
         }
         return result;
       }
-      return startRefresh(force);
+      return startRefresh(force, allowOutsideMarketHours);
     },
     getSnapshot() {
       return currentSnapshot;
@@ -343,10 +349,11 @@ export function createDataService(projectRoot, angelSession) {
       angelGeneration += 1;
       lastAngelAttemptAt = 0;
       currentSnapshot = null;
+      const authenticated = Boolean(angelSession && angelSession.status().authenticated);
       angelCache = {
         quotes: [], symbols: [], missingInstruments: [], failedBatchCount: 0,
         sourceTime: null,
-        status: sourceResult(false, "offline", "Sign in to Angel One", null)
+        status: sourceResult(false, "offline", authenticated ? "Signed in · tap Refresh now to fetch quotes" : "Sign in to Angel One", null)
       };
     }
   };

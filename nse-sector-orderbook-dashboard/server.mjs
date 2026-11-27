@@ -211,7 +211,7 @@ const server = http.createServer(async function (request, response) {
   }
   if (url.pathname === "/api/refresh" && request.method === "POST") {
     try {
-      sendJson(response, 200, await dataService.refresh(true));
+      sendJson(response, 200, await dataService.refresh(true, true));
     } catch {
       sendJson(response, 500, { error: "Refresh failed. Check the local project status and settings." });
     }
