@@ -198,7 +198,7 @@ export function createDataService(projectRoot, angelSession) {
       const invalidApiKey = Boolean(error && error.code === "ANGEL_INVALID_API_KEY");
       if (invalidApiKey) {
         angelGeneration += 1;
-        console.warn("[Angel One] Market-data API rejected this browser's SmartAPI key; keeping its dashboard sign-in and clearing only the unusable quote snapshot.");
+        console.warn("[Angel One] Market-data API rejected the active SmartAPI key; keeping the dashboard session and clearing only the unusable quote snapshot.");
         angelCache = {
           quotes: [], symbols: [], missingInstruments: [], failedBatchCount: 0,
           sourceTime: null,

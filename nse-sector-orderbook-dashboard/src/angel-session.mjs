@@ -89,7 +89,7 @@ export function createAngelSession() {
   function invalidateSession(reason) {
     if (!session) return;
     session = null;
-    console.warn("[Angel One] This browser's server-side session was cleared: " + reason + ".");
+    console.warn("[Angel One] The dashboard's server-side session was cleared: " + reason + ".");
   }
 
   async function getLoginDefaults() {
@@ -154,7 +154,7 @@ export function createAngelSession() {
       if (session === activeSession && error.code === "ANGEL_SESSION_EXPIRED") {
         invalidateSession("SmartAPI rejected the refresh token");
       } else if (session === activeSession && error.code === "ANGEL_INVALID_API_KEY") {
-        console.warn("[Angel One] SmartAPI rejected the API key during token refresh; keeping this browser signed in so the key can be corrected.");
+        console.warn("[Angel One] SmartAPI rejected the API key during token refresh; keeping the dashboard session active so the key can be corrected.");
       }
       throw error;
     }
@@ -219,6 +219,12 @@ export function createAngelSession() {
       return { authenticated: Boolean(session) };
     },
 
+    matches(input) {
+      if (!session) return false;
+      return session.apiKey === String(input.apiKey || "").trim()
+        && session.clientCode.toUpperCase() === String(input.clientCode || "").trim().toUpperCase();
+    },
+
     clear() {
       invalidateSession("the quote API explicitly rejected the API key");
     },
@@ -240,7 +246,7 @@ export function createAngelSession() {
         response = await makeRequest();
         if ((response.status === 401 || response.status === 403) && session === refreshedSession) {
           if (await responseRejectedApiKey(response)) {
-            console.warn("[Angel One] SmartAPI rejected the API key after token refresh; keeping this browser signed in so the key can be corrected.");
+            console.warn("[Angel One] SmartAPI rejected the API key after token refresh; keeping the dashboard session active so the key can be corrected.");
           } else {
             invalidateSession("quote access remained unauthorized after token refresh");
           }
