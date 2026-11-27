@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -33,8 +33,8 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 const port = Number(process.env.PORT || 8765);
-const angelSession = createAngelSession();
-const dataService = createDataService(projectRoot, angelSession);
+const clientContexts = new Map();
+const CLIENT_COOKIE_NAME = "nse_dashboard_client";
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -42,6 +42,36 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml"
 };
+
+function requestCookie(request, name) {
+  const cookieHeader = String(request.headers.cookie || "");
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    return part.slice(separator + 1).trim();
+  }
+  return "";
+}
+
+function getClientContext(request, response) {
+  let clientId = requestCookie(request, CLIENT_COOKIE_NAME);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(clientId)) {
+    clientId = randomBytes(32).toString("base64url");
+    response.setHeader("Set-Cookie", CLIENT_COOKIE_NAME + "=" + clientId
+      + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax"
+      + (runningOnRender ? "; Secure" : ""));
+  }
+
+  let context = clientContexts.get(clientId);
+  if (!context) {
+    const angelSession = createAngelSession();
+    const dataService = createDataService(projectRoot, angelSession);
+    context = { angelSession: angelSession, dataService: dataService };
+    clientContexts.set(clientId, context);
+    dataService.refresh().catch(function () {});
+  }
+  return context;
+}
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -162,26 +192,27 @@ const server = http.createServer(async function (request, response) {
     sendJson(response, 403, { error: "This dashboard accepts changes only from its own page." });
     return;
   }
+  const client = getClientContext(request, response);
   if (url.pathname === "/api/session" && request.method === "GET") {
-    sendJson(response, 200, angelSession.status());
+    sendJson(response, 200, client.angelSession.status());
     return;
   }
   if (url.pathname === "/api/login-info" && request.method === "GET") {
-    sendJson(response, 200, { ...(await angelSession.getLoginDefaults()), hosted: runningOnRender });
+    sendJson(response, 200, { ...(await client.angelSession.getLoginDefaults()), hosted: runningOnRender });
     return;
   }
   if (url.pathname === "/api/login" && request.method === "POST") {
     try {
       const credentials = await readJsonBody(request);
       if (runningOnRender) {
-        const renderNetwork = await angelSession.getLoginDefaults();
+        const renderNetwork = await client.angelSession.getLoginDefaults();
         for (const key of ["localIP", "publicIP", "macAddress"]) {
           if (renderNetwork[key]) credentials[key] = renderNetwork[key];
         }
       }
-      const status = await angelSession.login(credentials);
-      dataService.resetAngel();
-      dataService.refresh(true).catch(function () {});
+      const status = await client.angelSession.login(credentials);
+      client.dataService.resetAngel();
+      client.dataService.refresh(true).catch(function () {});
       sendJson(response, 200, { ...status, message: "Signed in. Loading market data…" });
     } catch (error) {
       sendJson(response, 401, { error: error.message || "Angel One sign-in failed." });
@@ -189,9 +220,9 @@ const server = http.createServer(async function (request, response) {
     return;
   }
   if (url.pathname === "/api/logout" && request.method === "POST") {
-    const result = await angelSession.logout();
-    dataService.resetAngel();
-    dataService.refresh(true).catch(function () {});
+    const result = await client.angelSession.logout();
+    client.dataService.resetAngel();
+    client.dataService.refresh(true).catch(function () {});
     sendJson(response, 200, {
       loggedOut: true,
       message: result.remoteLogout ? "Signed out of Angel One." : "Signed out locally. Angel One could not confirm remote logout."
@@ -199,7 +230,7 @@ const server = http.createServer(async function (request, response) {
     return;
   }
   if (url.pathname === "/api/dashboard" && request.method === "GET") {
-    const snapshot = dataService.getSnapshot();
+    const snapshot = client.dataService.getSnapshot();
     if (snapshot) sendJson(response, 200, snapshot);
     else sendJson(response, 200, {
       loading: true,
@@ -217,7 +248,7 @@ const server = http.createServer(async function (request, response) {
   }
   if (url.pathname === "/api/refresh" && request.method === "POST") {
     try {
-      sendJson(response, 200, await dataService.refresh(true, true));
+      sendJson(response, 200, await client.dataService.refresh(true, true));
     } catch {
       sendJson(response, 500, { error: "Refresh failed. Check the local project status and settings." });
     }
@@ -257,9 +288,10 @@ function listenOnPort(candidatePort) {
       });
       browser.unref();
     }
-    dataService.refresh().catch(function () {});
     setInterval(function () {
-      dataService.refresh().catch(function () {});
+      for (const client of clientContexts.values()) {
+        client.dataService.refresh().catch(function () {});
+      }
     }, 60000);
   });
 }
@@ -267,7 +299,9 @@ function listenOnPort(candidatePort) {
 listenOnPort(port);
 
 async function stopServer() {
-  await angelSession.logout();
+  await Promise.allSettled(Array.from(clientContexts.values()).map(function (client) {
+    return client.angelSession.logout();
+  }));
   server.close(function () { process.exit(0); });
 }
 process.once("SIGINT", stopServer);

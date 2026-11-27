@@ -3,9 +3,14 @@ const NSE_HOLIDAY_API = "https://www.nseindia.com/api/holiday-master?type=tradin
 const REQUEST_TIMEOUT_MS = 20000;
 const IST_OFFSET_MS = 330 * 60 * 1000;
 const NSE_HOLIDAY_REFERER = "https://www.nseindia.com/resources/exchange-communication-holidays";
+const NSE_INDEX_CACHE_MS = 5 * 60 * 1000;
 let holidayCache = null;
 let holidayCacheAt = 0;
 let holidayRequest = null;
+let sectorIndexCache = null;
+let sectorIndexCacheKey = "";
+let sectorIndexCacheAt = 0;
+let sectorIndexRequest = null;
 
 function normalizeName(value) {
   return String(value || "")
@@ -135,7 +140,7 @@ function indexRowFrom(rows, name, symbol) {
   return rows.find(function (row) { return expected.has(normalizeName(row && row.symbol)); }) || rows[0] || null;
 }
 
-export async function loadNseIndices(allowedNames) {
+async function fetchNseIndices(allowedNames) {
   const configuredNames = Array.isArray(allowedNames) ? allowedNames : [];
   const namesByNormalized = new Map(configuredNames.map(function (name) { return [normalizeName(name), name]; }));
   const listing = await getNseJson(NSE_INDEX_API + "getIndexList");
@@ -210,4 +215,25 @@ export async function loadNseIndices(allowedNames) {
   const sourceTimes = available.map(function (item) { return item.sourceTime; }).filter(Boolean);
   const latestSourceTime = sourceTimes.sort(function (a, b) { return new Date(b).getTime() - new Date(a).getTime(); })[0] || fetchedAt;
   return { indices: indices, sourceTime: latestSourceTime, fetchedAt: fetchedAt };
+}
+
+export async function loadNseIndices(allowedNames, force) {
+  const configuredNames = Array.isArray(allowedNames) ? allowedNames : [];
+  const cacheKey = JSON.stringify(configuredNames);
+  if (!force && sectorIndexCache && sectorIndexCacheKey === cacheKey && Date.now() - sectorIndexCacheAt < NSE_INDEX_CACHE_MS) {
+    return sectorIndexCache;
+  }
+  if (sectorIndexRequest && sectorIndexRequest.cacheKey === cacheKey) return sectorIndexRequest.promise;
+
+  let promise;
+  promise = fetchNseIndices(configuredNames).then(function (result) {
+    sectorIndexCache = result;
+    sectorIndexCacheKey = cacheKey;
+    sectorIndexCacheAt = Date.now();
+    return result;
+  }).finally(function () {
+    if (sectorIndexRequest && sectorIndexRequest.promise === promise) sectorIndexRequest = null;
+  });
+  sectorIndexRequest = { cacheKey: cacheKey, promise: promise };
+  return promise;
 }

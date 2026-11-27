@@ -73,6 +73,12 @@ export function createAngelSession() {
   let loginDefaultsAt = 0;
   let refreshPromise = null;
 
+  function invalidateSession(reason) {
+    if (!session) return;
+    session = null;
+    console.warn("[Angel One] This browser's server-side session was cleared: " + reason + ".");
+  }
+
   async function getLoginDefaults() {
     if (loginDefaultsCache && Date.now() - loginDefaultsAt < 60000) return loginDefaultsCache;
     const device = networkDefaults();
@@ -106,7 +112,7 @@ export function createAngelSession() {
     }
     const activeSession = session;
     if (!activeSession.refreshToken) {
-      session = null;
+      invalidateSession("no refresh token was available");
       const error = new Error("Your Angel One session has expired. Sign in again.");
       error.code = "ANGEL_SESSION_EXPIRED";
       throw error;
@@ -132,7 +138,9 @@ export function createAngelSession() {
         feedToken: payload.data.feedToken || activeSession.feedToken
       };
     } catch (error) {
-      if (session === activeSession && (error.code === "ANGEL_INVALID_API_KEY" || error.code === "ANGEL_SESSION_EXPIRED")) session = null;
+      if (session === activeSession && (error.code === "ANGEL_INVALID_API_KEY" || error.code === "ANGEL_SESSION_EXPIRED")) {
+        invalidateSession(error.code === "ANGEL_INVALID_API_KEY" ? "SmartAPI rejected the API key during token refresh" : "SmartAPI rejected the refresh token");
+      }
       throw error;
     }
   }
@@ -197,7 +205,7 @@ export function createAngelSession() {
     },
 
     clear() {
-      session = null;
+      invalidateSession("the quote API explicitly rejected the API key");
     },
 
     async request(url, options) {
@@ -215,7 +223,9 @@ export function createAngelSession() {
         await refreshPromise;
         const refreshedSession = session;
         response = await makeRequest();
-        if ((response.status === 401 || response.status === 403) && session === refreshedSession) session = null;
+        if ((response.status === 401 || response.status === 403) && session === refreshedSession) {
+          invalidateSession("quote access remained unauthorized after token refresh");
+        }
       }
       return response;
     },

@@ -146,11 +146,11 @@ export function createDataService(projectRoot, angelSession) {
     return { watchlist: watchlist, sectoralIndexNames: sectoralIndexNames };
   }
 
-  async function refreshNse(names) {
+  async function refreshNse(names, force) {
     const startedAt = Date.now();
     lastNseAttemptAt = startedAt;
     try {
-      const result = await loadNseIndices(names);
+      const result = await loadNseIndices(names, force);
       if (result.indices.length) {
         nseCache = {
           indices: result.indices,
@@ -272,7 +272,7 @@ export function createDataService(projectRoot, angelSession) {
       const nseDue = (nseMarketWindow.isOpen || allowOutsideMarketHours) && (force || !lastNseAttemptAt || now - lastNseAttemptAt >= NSE_REFRESH_MS);
       const angelDue = (angelMarketWindow.isOpen || allowOutsideMarketHours) && (force || !lastAngelAttemptAt || now - lastAngelAttemptAt >= ANGEL_REFRESH_MS);
       const pending = [];
-      if (nseDue) pending.push(refreshNse(config.sectoralIndexNames));
+      if (nseDue) pending.push(refreshNse(config.sectoralIndexNames, force));
       if (angelDue) pending.push(refreshAngel(config.watchlist));
       if (pending.length) await Promise.allSettled(pending);
 
