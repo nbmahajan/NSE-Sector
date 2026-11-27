@@ -67,6 +67,19 @@ async function readJson(response, serviceName) {
   return payload;
 }
 
+async function responseRejectedApiKey(response) {
+  const headerMessage = String(response.headers.get("x-error-message") || "");
+  if (/invalid\s*api\s*key/i.test(headerMessage)) return true;
+  try {
+    const payload = await response.clone().json();
+    const message = String(payload.message || payload.errorMessage || "");
+    const errorCode = String(payload.errorcode || payload.errorCode || "").toUpperCase();
+    return /invalid\s*api\s*key/i.test(message) || errorCode === "AG8004";
+  } catch {
+    return false;
+  }
+}
+
 export function createAngelSession() {
   let session = null;
   let loginDefaultsCache = null;
@@ -138,8 +151,10 @@ export function createAngelSession() {
         feedToken: payload.data.feedToken || activeSession.feedToken
       };
     } catch (error) {
-      if (session === activeSession && (error.code === "ANGEL_INVALID_API_KEY" || error.code === "ANGEL_SESSION_EXPIRED")) {
-        invalidateSession(error.code === "ANGEL_INVALID_API_KEY" ? "SmartAPI rejected the API key during token refresh" : "SmartAPI rejected the refresh token");
+      if (session === activeSession && error.code === "ANGEL_SESSION_EXPIRED") {
+        invalidateSession("SmartAPI rejected the refresh token");
+      } else if (session === activeSession && error.code === "ANGEL_INVALID_API_KEY") {
+        console.warn("[Angel One] SmartAPI rejected the API key during token refresh; keeping this browser signed in so the key can be corrected.");
       }
       throw error;
     }
@@ -224,7 +239,11 @@ export function createAngelSession() {
         const refreshedSession = session;
         response = await makeRequest();
         if ((response.status === 401 || response.status === 403) && session === refreshedSession) {
-          invalidateSession("quote access remained unauthorized after token refresh");
+          if (await responseRejectedApiKey(response)) {
+            console.warn("[Angel One] SmartAPI rejected the API key after token refresh; keeping this browser signed in so the key can be corrected.");
+          } else {
+            invalidateSession("quote access remained unauthorized after token refresh");
+          }
         }
       }
       return response;

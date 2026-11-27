@@ -200,7 +200,7 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
         const reason = String(payload.message || payload.errorMessage || "").trim();
         const errorCode = String(payload.errorcode || "").trim();
         if (/invalid\s*api\s*key/i.test(reason) || errorCode.toUpperCase() === "AG8004") {
-          const invalidKeyError = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Sign in again and confirm you entered the SmartAPI API Key, not the API Secret.");
+          const invalidKeyError = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Check the current SmartAPI API Key in your Angel One account; signing in again with the same key will not fix it.");
           invalidKeyError.code = "ANGEL_INVALID_API_KEY";
           throw invalidKeyError;
         }

@@ -198,11 +198,11 @@ export function createDataService(projectRoot, angelSession) {
       const invalidApiKey = Boolean(error && error.code === "ANGEL_INVALID_API_KEY");
       if (invalidApiKey) {
         angelGeneration += 1;
-        if (angelSession && typeof angelSession.clear === "function") angelSession.clear();
+        console.warn("[Angel One] Market-data API rejected this browser's SmartAPI key; keeping its dashboard sign-in and clearing only the unusable quote snapshot.");
         angelCache = {
           quotes: [], symbols: [], missingInstruments: [], failedBatchCount: 0,
           sourceTime: null,
-          status: sourceResult(false, "offline", error.message || "Angel One rejected the market-data API key. Sign in again.", null)
+          status: sourceResult(false, "offline", error.message || "Angel One rejected the SmartAPI API key (AG8004). Check the current API key in SmartAPI, then sign out and sign in with the corrected key.", null)
         };
         return;
       }
