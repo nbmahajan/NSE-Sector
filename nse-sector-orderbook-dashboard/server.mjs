@@ -167,12 +167,18 @@ const server = http.createServer(async function (request, response) {
     return;
   }
   if (url.pathname === "/api/login-info" && request.method === "GET") {
-    sendJson(response, 200, await angelSession.getLoginDefaults());
+    sendJson(response, 200, { ...(await angelSession.getLoginDefaults()), hosted: runningOnRender });
     return;
   }
   if (url.pathname === "/api/login" && request.method === "POST") {
     try {
       const credentials = await readJsonBody(request);
+      if (runningOnRender) {
+        const renderNetwork = await angelSession.getLoginDefaults();
+        for (const key of ["localIP", "publicIP", "macAddress"]) {
+          if (renderNetwork[key]) credentials[key] = renderNetwork[key];
+        }
+      }
       const status = await angelSession.login(credentials);
       dataService.resetAngel();
       dataService.refresh(true).catch(function () {});

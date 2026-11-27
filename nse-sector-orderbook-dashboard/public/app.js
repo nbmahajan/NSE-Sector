@@ -847,9 +847,11 @@ async function loadLoginDefaults() {
     if (!response.ok) return;
     const info = await response.json();
     const missingNetworkValue = !info.localIP || !info.publicIP || !info.macAddress;
+    const networkSummary = byId("network-settings").querySelector("summary");
+    if (info.hosted && networkSummary) networkSummary.textContent = "Render server network details";
     for (const [key, value] of Object.entries({ localIP: info.localIP, publicIP: info.publicIP, macAddress: info.macAddress })) {
       const input = byId("login-form").elements.namedItem(key);
-      if (input && !input.value) input.value = value || "";
+      if (input && (info.hosted ? Boolean(value) : !input.value)) input.value = value || "";
     }
     if (missingNetworkValue) {
       byId("network-settings").open = true;
