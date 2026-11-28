@@ -49,7 +49,7 @@ async function fetchJson(url, options, angelSession) {
   }
   if (!response.ok) {
     const reason = String(json && (json.message || json.errorMessage) || response.headers.get("x-error-message") || "").trim();
-    const errorCode = String(json && json.errorcode || "").trim();
+    const errorCode = String(json && (json.errorcode || json.errorCode) || "").trim();
     const error = new Error("Angel One quote request failed with HTTP " + response.status
       + (reason ? ": " + reason : "")
       + (errorCode ? " (" + errorCode + ")" : "") + ".");
@@ -162,6 +162,33 @@ async function fetchQuoteBatch(instruments, angelSession) {
   }, angelSession);
 }
 
+function invalidApiKeyErrorFromPayload(payload) {
+  const failed = payload && (payload.status === false || payload.status === "false" || payload.success === false || payload.success === "false");
+  if (!failed) return null;
+  const reason = String(payload.message || payload.errorMessage || "").trim();
+  const errorCode = String(payload.errorcode || payload.errorCode || "").trim();
+  if (!/invalid\s*api\s*key/i.test(reason) && errorCode.toUpperCase() !== "AG8004") return null;
+  const error = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Check the current SmartAPI API Key in your Angel One account; signing in again with the same key will not fix it.");
+  error.code = "ANGEL_INVALID_API_KEY";
+  return error;
+}
+
+async function fetchQuoteBatchWithRetry(instruments, angelSession) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = await fetchQuoteBatch(instruments, angelSession);
+      const invalidKeyError = invalidApiKeyErrorFromPayload(payload);
+      if (invalidKeyError) throw invalidKeyError;
+      return payload;
+    } catch (error) {
+      if (!error || error.code !== "ANGEL_INVALID_API_KEY" || attempt === 1) throw error;
+      console.info("[Angel One] Market-data quote request was rejected once; retrying the same batch after a short delay.");
+      await wait(MIN_REQUEST_GAP_MS);
+    }
+  }
+  throw new Error("Angel One quote retry ended unexpectedly.");
+}
+
 export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
   if (!angelSession || !angelSession.status().authenticated) throw new Error("Sign in to Angel One to load order-book data.");
 
@@ -184,7 +211,6 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
   const quoteByToken = new Map();
   const failedBatchSymbols = [];
   let firstBatchError = null;
-  let consecutiveInvalidApiKeyFailures = 0;
   let successfulBatches = 0;
   const batches = [];
   for (let index = 0; index < resolved.instruments.length; index += SYMBOLS_PER_REQUEST) {
@@ -195,10 +221,10 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
     if (index > 0) await wait(MIN_REQUEST_GAP_MS);
     const batch = batches[index];
     try {
-      const payload = await fetchQuoteBatch(batch, angelSession);
+      const payload = await fetchQuoteBatchWithRetry(batch, angelSession);
       if (payload.status === false || payload.status === "false" || payload.success === false || payload.success === "false") {
         const reason = String(payload.message || payload.errorMessage || "").trim();
-        const errorCode = String(payload.errorcode || "").trim();
+        const errorCode = String(payload.errorcode || payload.errorCode || "").trim();
         if (/invalid\s*api\s*key/i.test(reason) || errorCode.toUpperCase() === "AG8004") {
           const invalidKeyError = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Check the current SmartAPI API Key in your Angel One account; signing in again with the same key will not fix it.");
           invalidKeyError.code = "ANGEL_INVALID_API_KEY";
@@ -213,14 +239,10 @@ export async function loadAngelOneQuotes(watchlistConfig, angelSession) {
         if (token) quoteByToken.set(token, quote);
       }
       successfulBatches += 1;
-      consecutiveInvalidApiKeyFailures = 0;
     } catch (error) {
       if (!firstBatchError) firstBatchError = error && error.message ? error.message : "Angel One quote request failed.";
       if (error && error.code === "ANGEL_INVALID_API_KEY") {
-        consecutiveInvalidApiKeyFailures += 1;
-        if (!angelSession.status().authenticated || (!successfulBatches && consecutiveInvalidApiKeyFailures >= 2)) throw error;
-      } else {
-        consecutiveInvalidApiKeyFailures = 0;
+        throw error;
       }
       failedBatchSymbols.push(...batch.map(function (item) { return item.symbol; }));
     }
