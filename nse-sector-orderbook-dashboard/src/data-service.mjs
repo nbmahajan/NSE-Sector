@@ -81,6 +81,7 @@ export function createDataService(projectRoot, angelSession) {
   let refreshPromise = null;
   let forceRefreshQueued = false;
   let forceRefreshQueuedOutsideMarketHours = false;
+  let forceRefreshQueuedContext = null;
   let lastNseAttemptAt = 0;
   let lastAngelAttemptAt = 0;
   let lastCompletedRefreshAt = null;
@@ -167,7 +168,7 @@ export function createDataService(projectRoot, angelSession) {
     }
   }
 
-  async function refreshAngel(watchlist) {
+  async function refreshAngel(watchlist, refreshContext) {
     const generation = angelGeneration;
     const startedAt = Date.now();
     lastAngelAttemptAt = startedAt;
@@ -199,6 +200,13 @@ export function createDataService(projectRoot, angelSession) {
       if (invalidApiKey) {
         angelGeneration += 1;
         console.warn("[Angel One] Market-data API rejected the active SmartAPI key; keeping the dashboard session and clearing only the unusable quote snapshot.");
+        console.warn("[Angel One] Safe quote rejection details: " + JSON.stringify({
+          source: refreshContext && refreshContext.source || "scheduled",
+          browser: refreshContext && refreshContext.clientTag || null,
+          httpStatus: error && Number(error.providerHttpStatus) || null,
+          errorCode: error && error.providerErrorCode || null,
+          invalidApiKeyMessage: Boolean(error && error.providerMessageMatchedInvalidApiKey)
+        }));
         angelCache = {
           quotes: [], symbols: [], missingInstruments: [], failedBatchCount: 0,
           sourceTime: null,
@@ -212,7 +220,7 @@ export function createDataService(projectRoot, angelSession) {
     }
   }
 
-  async function performRefresh(force, allowOutsideMarketHours) {
+  async function performRefresh(force, allowOutsideMarketHours, refreshContext) {
     const config = await getConfiguration();
     const mode = String(process.env.DATA_MODE || "live").toLowerCase() === "demo" ? "demo" : "live";
     let now = Date.now();
@@ -273,7 +281,7 @@ export function createDataService(projectRoot, angelSession) {
       const angelDue = (angelMarketWindow.isOpen || allowOutsideMarketHours) && (force || !lastAngelAttemptAt || now - lastAngelAttemptAt >= ANGEL_REFRESH_MS);
       const pending = [];
       if (nseDue) pending.push(refreshNse(config.sectoralIndexNames, force));
-      if (angelDue) pending.push(refreshAngel(config.watchlist));
+      if (angelDue) pending.push(refreshAngel(config.watchlist, refreshContext));
       if (pending.length) await Promise.allSettled(pending);
 
       indices = nseCache.indices;
@@ -325,9 +333,9 @@ export function createDataService(projectRoot, angelSession) {
     return currentSnapshot;
   }
 
-  function startRefresh(force, allowOutsideMarketHours) {
+  function startRefresh(force, allowOutsideMarketHours, refreshContext) {
     let tracked;
-    tracked = performRefresh(Boolean(force), Boolean(allowOutsideMarketHours)).finally(function () {
+    tracked = performRefresh(Boolean(force), Boolean(allowOutsideMarketHours), refreshContext).finally(function () {
       if (refreshPromise === tracked) refreshPromise = null;
     });
     refreshPromise = tracked;
@@ -335,23 +343,29 @@ export function createDataService(projectRoot, angelSession) {
   }
 
   return {
-    async refresh(force, allowOutsideMarketHours) {
+    async refresh(force, allowOutsideMarketHours, refreshContext) {
+      const context = refreshContext && typeof refreshContext === "object"
+        ? refreshContext
+        : { source: force ? "manual" : "scheduled", clientTag: null };
       if (refreshPromise) {
         if (force) {
           forceRefreshQueued = true;
           forceRefreshQueuedOutsideMarketHours = forceRefreshQueuedOutsideMarketHours || Boolean(allowOutsideMarketHours);
+          forceRefreshQueuedContext = context;
         }
         const active = refreshPromise;
         const result = await active;
         if (forceRefreshQueued && !refreshPromise) {
           const queuedOutsideMarketHours = forceRefreshQueuedOutsideMarketHours;
+          const queuedContext = forceRefreshQueuedContext || context;
           forceRefreshQueued = false;
           forceRefreshQueuedOutsideMarketHours = false;
-          return startRefresh(true, queuedOutsideMarketHours);
+          forceRefreshQueuedContext = null;
+          return startRefresh(true, queuedOutsideMarketHours, queuedContext);
         }
         return result;
       }
-      return startRefresh(force, allowOutsideMarketHours);
+      return startRefresh(force, allowOutsideMarketHours, context);
     },
     getSnapshot() {
       return currentSnapshot;

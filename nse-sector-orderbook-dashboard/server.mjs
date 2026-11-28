@@ -67,7 +67,7 @@ function getClientContext(request, response) {
 
   let context = clientContexts.get(clientId);
   if (!context) {
-    context = { clientId: clientId, authorized: false };
+    context = { clientId: clientId, logTag: randomBytes(3).toString("hex"), authorized: false };
     clientContexts.set(clientId, context);
   }
   return context;
@@ -103,20 +103,24 @@ function runAngelLogin(client, credentials) {
     if (angelSession.status().authenticated) {
       if (angelSession.matches(credentials)) {
         client.authorized = true;
-        dataService.refresh(true).catch(function () {});
+        console.info("[Angel One] Browser " + client.logTag + " reused the active server-side session.");
+        dataService.refresh(true, false, { source: "login-reuse", clientTag: client.logTag }).catch(function () {});
         return { ...angelSession.status(), message: "Connected to the existing Angel One session on this dashboard. Loading market data…" };
       }
       if (!angelSession.matchesClient(credentials) && hasOtherAuthorizedClient(client)) {
         throw new Error("Another browser has an active Angel One session. Use the same client code and API key, or reset the Angel One session on all browsers before switching accounts.");
       }
+      const sameClientCode = angelSession.matchesClient(credentials);
       await angelSession.logout();
       dataService.resetAngel();
+      console.info("[Angel One] Browser " + client.logTag + " replaced the active server-side session (" + (sameClientCode ? "same client code, different API key" : "different client code") + "); credentials omitted.");
     }
 
     const status = await angelSession.login(credentials);
     client.authorized = true;
     dataService.resetAngel();
-    dataService.refresh(true).catch(function () {});
+    console.info("[Angel One] Browser " + client.logTag + " established a new server-side session; credentials omitted.");
+    dataService.refresh(true, false, { source: "login-new", clientTag: client.logTag }).catch(function () {});
     return { ...status, message: "Signed in. Loading market data…" };
   });
   angelLoginQueue = operation.catch(function () {});
@@ -279,7 +283,7 @@ const server = http.createServer(async function (request, response) {
     }
     const result = await angelSession.logout();
     dataService.resetAngel();
-    dataService.refresh(true).catch(function () {});
+    dataService.refresh(true, false, { source: "logout", clientTag: client.logTag }).catch(function () {});
     sendJson(response, 200, {
       loggedOut: true,
       message: result.remoteLogout ? "Signed out of Angel One." : "Signed out locally. Angel One could not confirm remote logout."
@@ -290,7 +294,7 @@ const server = http.createServer(async function (request, response) {
     for (const context of clientContexts.values()) context.authorized = false;
     const result = await angelSession.logout();
     dataService.resetAngel();
-    dataService.refresh(true).catch(function () {});
+    dataService.refresh(true, false, { source: "logout-all", clientTag: client.logTag }).catch(function () {});
     sendJson(response, 200, {
       loggedOut: true,
       remoteLogout: result.remoteLogout,
@@ -319,7 +323,7 @@ const server = http.createServer(async function (request, response) {
   }
   if (url.pathname === "/api/refresh" && request.method === "POST") {
     try {
-      sendJson(response, 200, snapshotForClient(await dataService.refresh(true, true), client));
+      sendJson(response, 200, snapshotForClient(await dataService.refresh(true, true, { source: "manual", clientTag: client.logTag }), client));
     } catch {
       sendJson(response, 500, { error: "Refresh failed. Check the local project status and settings." });
     }
@@ -359,9 +363,9 @@ function listenOnPort(candidatePort) {
       });
       browser.unref();
     }
-    dataService.refresh().catch(function () {});
+    dataService.refresh(false, false, { source: "startup", clientTag: null }).catch(function () {});
     setInterval(function () {
-      dataService.refresh().catch(function () {});
+      dataService.refresh(false, false, { source: "scheduler", clientTag: null }).catch(function () {});
     }, 60000);
   });
 }

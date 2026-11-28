@@ -47,12 +47,18 @@ async function fetchJson(url, options, angelSession) {
   } catch {
     throw new Error("Angel One returned a response that was not JSON.");
   }
+  if (json && typeof json === "object") {
+    Object.defineProperty(json, "__angelHttpStatus", { value: response.status, enumerable: false });
+  }
   if (!response.ok) {
     const reason = String(json && (json.message || json.errorMessage) || response.headers.get("x-error-message") || "").trim();
     const errorCode = String(json && (json.errorcode || json.errorCode) || "").trim();
     const error = new Error("Angel One quote request failed with HTTP " + response.status
       + (reason ? ": " + reason : "")
       + (errorCode ? " (" + errorCode + ")" : "") + ".");
+    error.providerHttpStatus = response.status;
+    error.providerErrorCode = errorCode.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+    error.providerMessageMatchedInvalidApiKey = /invalid\s*api\s*key/i.test(reason);
     if (/invalid\s*api\s*key/i.test(reason) || errorCode.toUpperCase() === "AG8004") error.code = "ANGEL_INVALID_API_KEY";
     throw error;
   }
@@ -170,6 +176,9 @@ function invalidApiKeyErrorFromPayload(payload) {
   if (!/invalid\s*api\s*key/i.test(reason) && errorCode.toUpperCase() !== "AG8004") return null;
   const error = new Error("Angel One rejected the market-data API key" + (errorCode ? " (" + errorCode + ")" : "") + ". Check the current SmartAPI API Key in your Angel One account; signing in again with the same key will not fix it.");
   error.code = "ANGEL_INVALID_API_KEY";
+  error.providerHttpStatus = Number(payload.__angelHttpStatus) || null;
+  error.providerErrorCode = errorCode.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  error.providerMessageMatchedInvalidApiKey = /invalid\s*api\s*key/i.test(reason);
   return error;
 }
 
