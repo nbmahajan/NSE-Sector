@@ -265,7 +265,7 @@
       <h2 id="login-title">Sign in to load the order books</h2>
       <p class="login-intro">Enter your SmartAPI API Key here, not your API Secret. The session stays on this dashboard server and is shared by its browsers. Your PIN and one-time code are used only to sign in, then cleared from the form.</p>
       <form id="login-form" autocomplete="off">
-        <label class="login-field"><span>SmartAPI API Key (not API Secret)</span><input name="apiKey" type="password" required autocomplete="off"></label>
+        <label class="login-field"><span>SmartAPI API Key (not API Secret)</span><span class="api-key-entry"><input id="angel-api-key" name="apiKey" type="text" required autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-visible="false"><button id="api-key-visibility" class="api-key-visibility" type="button" aria-label="Show API key" aria-pressed="false">Show</button></span></label>
         <div class="login-columns">
           <label class="login-field"><span>Client code</span><input name="clientCode" type="text" required autocomplete="off"></label>
           <label class="login-field"><span>PIN</span><input name="pin" type="password" required inputmode="numeric" autocomplete="off"></label>

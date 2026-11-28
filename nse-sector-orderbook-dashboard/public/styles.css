@@ -163,6 +163,11 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 680; letter-spac
 .login-intro, .login-footnote { margin: 0 0 15px; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .login-field { display: grid; gap: 5px; margin-top: 10px; color: var(--muted); font-size: 10px; font-weight: 650; }
 .login-field input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; outline-color: var(--blue); background: var(--panel-raised); color: var(--ink); font-size: 12px; }
+.api-key-entry { position: relative; display: block; }
+.api-key-entry input { padding-right: 58px; -webkit-text-security: disc; }
+.api-key-entry input[data-visible="true"] { -webkit-text-security: none; }
+.api-key-visibility { position: absolute; top: 50%; right: 6px; min-width: 42px; padding: 4px 6px; transform: translateY(-50%); border: 0; border-radius: 6px; background: transparent; color: var(--blue); font-size: 10px; font-weight: 700; cursor: pointer; }
+.api-key-visibility:hover { background: var(--soft); }
 .login-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .network-settings { margin: 13px 0 2px; padding-top: 10px; border-top: 1px solid var(--line); }
 .network-settings summary { color: var(--muted); font-size: 10px; cursor: pointer; }

@@ -930,6 +930,16 @@ byId("login-form").addEventListener("submit", async function (event) {
   }
 });
 
+byId("api-key-visibility").addEventListener("click", function () {
+  const input = byId("angel-api-key");
+  const button = byId("api-key-visibility");
+  const visible = input.dataset.visible !== "true";
+  input.dataset.visible = String(visible);
+  button.textContent = visible ? "Hide" : "Show";
+  button.setAttribute("aria-label", visible ? "Hide API key" : "Show API key");
+  button.setAttribute("aria-pressed", String(visible));
+});
+
 byId("sign-in-button").addEventListener("click", function () {
   byId("login-error").hidden = true;
   byId("login-backdrop").hidden = false;

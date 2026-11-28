@@ -111,6 +111,9 @@ function runAngelLogin(client, credentials) {
         throw new Error("Another browser has an active Angel One session. Use the same client code and API key, or reset the Angel One session on all browsers before switching accounts.");
       }
       const sameClientCode = angelSession.matchesClient(credentials);
+      if (sameClientCode && hasOtherAuthorizedClient(client)) {
+        throw new Error("This browser submitted a different SmartAPI API key from the one active in another browser for this client. Check the API key field and any browser autofill; the active session was left unchanged.");
+      }
       await angelSession.logout();
       dataService.resetAngel();
       console.info("[Angel One] Browser " + client.logTag + " replaced the active server-side session (" + (sameClientCode ? "same client code, different API key" : "different client code") + "); credentials omitted.");
