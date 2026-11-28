@@ -106,8 +106,8 @@ function runAngelLogin(client, credentials) {
         dataService.refresh(true).catch(function () {});
         return { ...angelSession.status(), message: "Connected to the existing Angel One session on this dashboard. Loading market data…" };
       }
-      if (hasOtherAuthorizedClient(client)) {
-        throw new Error("A different Angel One account is active in the other browser. Sign out there before switching accounts.");
+      if (!angelSession.matchesClient(credentials) && hasOtherAuthorizedClient(client)) {
+        throw new Error("Another browser has an active Angel One session. Use the same client code and API key, or reset the Angel One session on all browsers before switching accounts.");
       }
       await angelSession.logout();
       dataService.resetAngel();
@@ -283,6 +283,20 @@ const server = http.createServer(async function (request, response) {
     sendJson(response, 200, {
       loggedOut: true,
       message: result.remoteLogout ? "Signed out of Angel One." : "Signed out locally. Angel One could not confirm remote logout."
+    });
+    return;
+  }
+  if (url.pathname === "/api/logout-all" && request.method === "POST") {
+    for (const context of clientContexts.values()) context.authorized = false;
+    const result = await angelSession.logout();
+    dataService.resetAngel();
+    dataService.refresh(true).catch(function () {});
+    sendJson(response, 200, {
+      loggedOut: true,
+      remoteLogout: result.remoteLogout,
+      message: result.remoteLogout
+        ? "Signed out of Angel One on this dashboard. All browsers must sign in again."
+        : "Cleared the Angel One session on this dashboard. Angel One could not confirm remote sign-out. All browsers must sign in again."
     });
     return;
   }

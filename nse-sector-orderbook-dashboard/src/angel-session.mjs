@@ -225,6 +225,11 @@ export function createAngelSession() {
         && session.clientCode.toUpperCase() === String(input.clientCode || "").trim().toUpperCase();
     },
 
+    matchesClient(input) {
+      if (!session) return false;
+      return session.clientCode.toUpperCase() === String(input.clientCode || "").trim().toUpperCase();
+    },
+
     clear() {
       invalidateSession("the quote API explicitly rejected the API key");
     },

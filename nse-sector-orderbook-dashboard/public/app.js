@@ -936,6 +936,36 @@ byId("sign-in-button").addEventListener("click", function () {
   loadLoginDefaults();
 });
 byId("continue-without-login").addEventListener("click", function () { byId("login-backdrop").hidden = true; });
+byId("reset-all-sessions").addEventListener("click", async function () {
+  if (!window.confirm("This signs Angel One out on every browser using this dashboard and clears the order-book tables. Continue?")) return;
+  const button = byId("reset-all-sessions");
+  const signInButton = byId("login-submit");
+  const error = byId("login-error");
+  sessionRevision += 1;
+  sessionChangeInFlight = true;
+  button.disabled = true;
+  signInButton.disabled = true;
+  button.textContent = "Resetting all sessions…";
+  error.hidden = true;
+  try {
+    const response = await fetch("/api/logout-all", { method: "POST", cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not reset the shared Angel One session.");
+    setSessionUi(false);
+    error.textContent = result.message || "Angel One was signed out on this dashboard. Sign in again.";
+    error.hidden = false;
+    loadSnapshot(false);
+  } catch (failure) {
+    error.textContent = failure.message || "Could not reset the shared Angel One session.";
+    error.hidden = false;
+  } finally {
+    sessionChangeInFlight = false;
+    button.disabled = false;
+    signInButton.disabled = false;
+    button.textContent = "Reset Angel One sign-in on all browsers";
+    checkSession(false);
+  }
+});
 byId("sign-out-button").addEventListener("click", async function () {
   const button = byId("sign-out-button");
   sessionRevision += 1;
