@@ -878,6 +878,10 @@ async function checkSession(showLogin) {
   const requestRevision = sessionRevision;
   try {
     const response = await fetch("/api/session", { cache: "no-store" });
+    if (response.status === 401) {
+      window.location.replace("/");
+      return;
+    }
     if (!response.ok) return;
     const status = await response.json();
     // A phone can have a slow session request still in flight when sign-in finishes.

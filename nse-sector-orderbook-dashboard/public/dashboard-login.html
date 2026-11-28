@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Dashboard sign in</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; color: #142332; background: #eef3f1; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 20px; }
+    main { width: min(100%, 430px); padding: 30px; border: 1px solid #d8e3df; border-radius: 20px; background: #fff; box-shadow: 0 16px 48px #19304418; }
+    .eyebrow { color: #537493; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 9px 0 10px; font-size: 26px; }
+    p { color: #587082; line-height: 1.5; }
+    label { display: block; margin-top: 18px; font-weight: 700; font-size: 14px; }
+    input { display: block; width: 100%; height: 50px; margin-top: 8px; padding: 0 13px; border: 1px solid #d5e0dc; border-radius: 12px; background: #f8faf9; color: #142332; font: inherit; }
+    input:focus { outline: 3px solid #4c739633; border-color: #4c7396; }
+    button { width: 100%; min-height: 50px; margin-top: 22px; border: 0; border-radius: 12px; background: #4c7396; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .65; cursor: wait; }
+    #error { min-height: 22px; margin: 12px 0 0; color: #b22f44; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Independent market monitor</div>
+    <h1>Sign in to the dashboard</h1>
+    <p>Use the dashboard password set in Render. This is separate from your Angel One sign-in.</p>
+    <form id="dashboard-login-form" autocomplete="off">
+      <label>Username
+        <input name="username" type="text" value="dashboard" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label>Dashboard password
+        <input name="password" type="password" autocomplete="off" required>
+      </label>
+      <button id="submit-button" type="submit">Continue</button>
+      <p id="error" role="alert" aria-live="polite"></p>
+    </form>
+  </main>
+  <script>
+    const form = document.getElementById("dashboard-login-form");
+    const button = document.getElementById("submit-button");
+    const error = document.getElementById("error");
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      button.disabled = true;
+      button.textContent = "Signing in…";
+      error.textContent = "";
+      try {
+        const response = await fetch("/api/dashboard-login", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
+          cache: "no-store"
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Dashboard sign-in failed.");
+        window.location.replace("/");
+      } catch (failure) {
+        error.textContent = failure.message || "Dashboard sign-in failed.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Continue";
+      }
+    });
+  </script>
+</body>
+</html>

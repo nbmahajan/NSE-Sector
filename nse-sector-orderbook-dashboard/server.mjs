@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -12,6 +12,8 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const publicRoot = path.join(projectRoot, "public");
 const runningOnRender = String(process.env.RENDER || "").toLowerCase() === "true";
 const MIN_DASHBOARD_PASSWORD_LENGTH = 12;
+const DASHBOARD_COOKIE_NAME = "nse_dashboard_access";
+const DASHBOARD_SESSION_SECONDS = 12 * 60 * 60;
 
 function loadLocalEnv() {
   const envPath = path.join(projectRoot, ".env");
@@ -133,10 +135,11 @@ function runAngelLogin(client, credentials) {
   return operation;
 }
 
-function sendJson(response, statusCode, body) {
+function sendJson(response, statusCode, body, extraHeaders = {}) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    ...extraHeaders
   });
   response.end(JSON.stringify(body));
 }
@@ -147,36 +150,31 @@ function constantTimeMatch(left, right) {
   return timingSafeEqual(leftHash, rightHash);
 }
 
-function authorizeHostedDashboard(request, response) {
-  if (!runningOnRender) return true;
-  const expectedPassword = String(process.env.DASHBOARD_PASSWORD || "");
-  if (expectedPassword.length < MIN_DASHBOARD_PASSWORD_LENGTH) {
-    sendJson(response, 503, { error: "The dashboard owner must set a 12-character-or-longer DASHBOARD_PASSWORD in Render before using this service." });
-    return false;
-  }
+function dashboardPasswordConfigured() {
+  return String(process.env.DASHBOARD_PASSWORD || "").length >= MIN_DASHBOARD_PASSWORD_LENGTH;
+}
 
-  const authorization = String(request.headers.authorization || "");
-  const match = authorization.match(/^Basic\s+([A-Za-z0-9+/=]+)$/i);
-  let username = "";
-  let password = "";
-  if (match) {
-    try {
-      const decoded = Buffer.from(match[1], "base64").toString("utf8");
-      const separator = decoded.indexOf(":");
-      if (separator >= 0) {
-        username = decoded.slice(0, separator);
-        password = decoded.slice(separator + 1);
-      }
-    } catch {}
-  }
-  if (username === "dashboard" && constantTimeMatch(password, expectedPassword)) return true;
-  response.writeHead(401, {
-    "Content-Type": "text/plain; charset=utf-8",
-    "Cache-Control": "no-store",
-    "WWW-Authenticate": 'Basic realm="NSE Sector Dashboard", charset="UTF-8"'
-  });
-  response.end("Sign in to the dashboard.");
-  return false;
+function dashboardCookieSignature(expiry, password) {
+  return createHmac("sha256", password).update("nse-sector-dashboard:" + expiry).digest("base64url");
+}
+
+function makeDashboardCookie(password) {
+  const expiry = Math.floor(Date.now() / 1000) + DASHBOARD_SESSION_SECONDS;
+  return expiry + "." + dashboardCookieSignature(expiry, password);
+}
+
+function dashboardCookieIsValid(request) {
+  if (!runningOnRender) return true;
+  const password = String(process.env.DASHBOARD_PASSWORD || "");
+  if (password.length < MIN_DASHBOARD_PASSWORD_LENGTH) return false;
+  const value = requestCookie(request, DASHBOARD_COOKIE_NAME);
+  const match = value.match(/^(\d{10})\.([A-Za-z0-9_-]{43})$/);
+  if (!match) return false;
+  const expiry = Number(match[1]);
+  if (!Number.isSafeInteger(expiry) || expiry <= Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(dashboardCookieSignature(expiry, password));
+  const actual = Buffer.from(match[2]);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function isSameOrigin(request) {
@@ -261,7 +259,47 @@ const server = http.createServer(async function (request, response) {
     sendJson(response, 200, { ok: true });
     return;
   }
-  if (!authorizeHostedDashboard(request, response)) return;
+  if (runningOnRender && url.pathname === "/api/dashboard-login" && request.method === "POST") {
+    if (!isSameOrigin(request)) {
+      sendJson(response, 403, { error: "Sign in through the dashboard page." });
+      return;
+    }
+    if (!dashboardPasswordConfigured()) {
+      sendJson(response, 503, { error: "The dashboard owner must set a 12-character-or-longer DASHBOARD_PASSWORD in Render." });
+      return;
+    }
+    try {
+      const payload = await readJsonBody(request);
+      const username = typeof payload.username === "string" ? payload.username.trim() : "";
+      const password = typeof payload.password === "string" ? payload.password : "";
+      const expectedPassword = String(process.env.DASHBOARD_PASSWORD || "");
+      if (username !== "dashboard" || !constantTimeMatch(password, expectedPassword)) {
+        sendJson(response, 401, { error: "The dashboard username or password is incorrect." });
+        return;
+      }
+      const cookieValue = makeDashboardCookie(expectedPassword);
+      sendJson(response, 200, { authenticated: true }, {
+        "Set-Cookie": DASHBOARD_COOKIE_NAME + "=" + cookieValue
+          + "; Path=/; Max-Age=" + DASHBOARD_SESSION_SECONDS
+          + "; HttpOnly; Secure; SameSite=Lax"
+      });
+    } catch {
+      sendJson(response, 400, { error: "Could not read the dashboard sign-in form." });
+    }
+    return;
+  }
+  if (runningOnRender && !dashboardPasswordConfigured()) {
+    sendJson(response, 503, { error: "The dashboard owner must set a 12-character-or-longer DASHBOARD_PASSWORD in Render before using this service." });
+    return;
+  }
+  if (runningOnRender && !dashboardCookieIsValid(request)) {
+    if (request.method === "GET" && ["/", "/index.html", "/dashboard-login.html"].includes(url.pathname)) {
+      await serveStatic("/dashboard-login.html", response);
+      return;
+    }
+    sendJson(response, 401, { dashboardLoginRequired: true, error: "Sign in to the dashboard first." });
+    return;
+  }
   if (url.pathname.startsWith("/api/") && !runningOnRender && !isLocalOrigin(request)) {
     sendJson(response, 403, { error: "This local dashboard accepts requests from this computer only." });
     return;
