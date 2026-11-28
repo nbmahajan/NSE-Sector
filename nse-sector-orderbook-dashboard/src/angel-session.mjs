@@ -239,7 +239,8 @@ export function createAngelSession() {
       const makeRequest = function () {
         return fetch(url, {
           ...options,
-          headers: { ...baseHeaders(session, true), ...(options && options.headers || {}) },
+          // Session-owned SmartAPI headers are authoritative; request callers cannot substitute another key or token.
+          headers: { ...(options && options.headers || {}), ...baseHeaders(session, true) },
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
       };

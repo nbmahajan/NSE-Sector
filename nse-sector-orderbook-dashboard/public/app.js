@@ -915,6 +915,10 @@ byId("login-form").addEventListener("submit", async function (event) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Sign-in failed.");
     form.reset();
+    byId("angel-api-key").dataset.visible = "false";
+    byId("api-key-visibility").textContent = "Show";
+    byId("api-key-visibility").setAttribute("aria-label", "Show API key");
+    byId("api-key-visibility").setAttribute("aria-pressed", "false");
     setSessionUi(true);
     byId("notice").dataset.state = "live";
     byId("notice").querySelector("span:last-child").textContent = result.message || "Signed in. Loading market data…";

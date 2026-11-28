@@ -32,6 +32,9 @@ function loadLocalEnv() {
 }
 
 loadLocalEnv();
+if (["ANGELONE_API_KEY", "ANGELONE_API_SECRET", "ANGELONE_JWT", "ANGELONE_REFRESH_TOKEN", "ANGELONE_CLIENT_CODE"].some(function (name) { return Boolean(process.env[name]); })) {
+  console.warn("[Angel One] Ignoring environment-based credentials; only the API Key entered in the sign-in form is used.");
+}
 const port = Number(process.env.PORT || 8765);
 const clientContexts = new Map();
 const CLIENT_COOKIE_NAME = "nse_dashboard_client";
@@ -204,6 +207,24 @@ async function readJsonBody(request, limit = 16000) {
   }
 }
 
+function credentialsFromLoginForm(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Sign in through the Angel One form and enter the requested SmartAPI API Key.");
+  }
+  const field = function (name) { return typeof payload[name] === "string" ? payload[name].trim() : ""; };
+  const apiKey = field("apiKey");
+  if (!apiKey) throw new Error("Enter the SmartAPI API Key in the Angel One sign-in form.");
+  return {
+    apiKey: apiKey,
+    clientCode: field("clientCode"),
+    pin: field("pin"),
+    totp: field("totp"),
+    localIP: field("localIP"),
+    publicIP: field("publicIP"),
+    macAddress: field("macAddress")
+  };
+}
+
 function isLocalOrigin(request) {
   const host = String(request.headers.host || "").toLowerCase();
   if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) return false;
@@ -261,7 +282,7 @@ const server = http.createServer(async function (request, response) {
   }
   if (url.pathname === "/api/login" && request.method === "POST") {
     try {
-      const credentials = await readJsonBody(request);
+      const credentials = credentialsFromLoginForm(await readJsonBody(request));
       if (runningOnRender) {
         const renderNetwork = await angelSession.getLoginDefaults();
         for (const key of ["localIP", "publicIP", "macAddress"]) {
